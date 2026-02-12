@@ -21,7 +21,7 @@ FIRST_ADMIN_ID = int(os.getenv('FIRST_ADMIN_ID', '1623892821'))
 # Encryption Key for Instagram Passwords
 # LEAVE EMPTY first time - bot will generate it
 # Then set it as environment variable
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', '0r9gDlaMxS2Fi4-6J1Me4axMJ3cSSxTKtfdHL0b5VJY=')
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', '')
 
 # ============================================
 #       RATE LIMITS & SETTINGS
