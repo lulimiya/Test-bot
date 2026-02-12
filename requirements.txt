@@ -1,4 +1,4 @@
-python-telegram-bot==20.7
+python-telegram-bot[job-queue]==20.7
 pymongo==4.16.0
 dnspython==2.8.0
 instagrapi==2.1.5
