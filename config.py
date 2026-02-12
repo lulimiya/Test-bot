@@ -7,7 +7,7 @@ import os
 # Telegram Bot Token
 # Get from @BotFather on Telegram
 # SECURITY: Set via environment variable!
-BOT_TOKEN = os.getenv('BOT_TOKEN', '16638638040:6638638040:AAE08LSPDOdI0ksjz8b8CuNrg-gnNzqS534')
+BOT_TOKEN = os.getenv('BOT_TOKEN', '6638638040:AAE08LSPDOdI0ksjz8b8CuNrg-gnNzqS534')
 
 # MongoDB Connection String
 # Get from MongoDB Atlas Dashboard
