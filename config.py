@@ -12,7 +12,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN', '16638638040:6638638040:AAE08LSPDOdI0ksjz8b8C
 # MongoDB Connection String
 # Get from MongoDB Atlas Dashboard
 # SECURITY: Set via environment variable!
-MONGO_URI = os.getenv('MONGO_URI', 'mongodb+srv://mariosglade_db_user:<db_password>@cluster0.fagx1yc.mongodb.net/?appName=Cluster0')
+MONGO_URI = os.getenv('MONGO_URI', 'mongodb+srv://mariosglade_db_user:yuY6PjghTgOP8Kf8@cluster0.fagx1yc.mongodb.net/?appName=Cluster0')
 
 # Your Telegram User ID
 # Get from @userinfobot on Telegram
