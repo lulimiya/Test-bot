@@ -1,106 +1,30 @@
 """
-REFACTORED INSTAGRAM LOGIN FUNCTIONS
-Drop-in replacement for your existing bot.py login functions
-
-These replace the login_ig_account, setup_first_account_pass,
-and add_ig_pass_handler functions in your bot.py
+Instagram Login Helper Functions
+Add these functions to your bot.py or import from here
 """
 
-import os
 import asyncio
 import logging
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Tuple, Optional
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-
+from instagrapi import Client
 from instagram_auth import InstagramAuthManager, LoginStatus, ChallengeMethod
-from telegram_login_handlers import InstagramLoginHandler
-
-# Assuming these are imported from your config
-# from config import ACTIVE_ENCRYPTION_KEY
 
 logger = logging.getLogger(__name__)
 
-# ============================================
-#       INITIALIZE AUTH MANAGER (GLOBAL)
-# ============================================
-# Add this to your bot.py global initialization section
-
-# Initialize Instagram Auth Manager
-ig_auth_manager = InstagramAuthManager(
-    sessions_dir="sessions",
-    encryption_key=ACTIVE_ENCRYPTION_KEY,  # Your existing encryption key
-    mongo_collection=accounts_col,  # Your MongoDB collection for accounts
-    session_timeout_days=90,
-)
-
-# Initialize Login Handler
-ig_login_handler = InstagramLoginHandler(
-    auth_manager=ig_auth_manager,
-    active_clients=instagram_clients,  # Your existing clients dict
-    clients_lock=ig_clients_lock,  # Your existing lock
-)
-
-
-# ============================================
-#       UPDATED LOGIN FUNCTION
-# ============================================
-
-async def login_ig_account_v2(username: str, password: str) -> Tuple[bool, str, Optional[Client]]:
-    """
-    Production-grade Instagram login with session management
-    
-    This replaces your existing login_ig_account function
-    
-    Args:
-        username: Raw Instagram username (will be sanitized)
-        password: Instagram password
-        
-    Returns:
-        Tuple of (success, message, client)
-    """
-    # Sanitize username
-    username = ig_auth_manager.sanitize_username(username)
-    
-    # Validate username
-    is_valid, error_msg = ig_auth_manager.validate_username(username)
-    if not is_valid:
-        return False, f"Invalid username: {error_msg}", None
-    
-    try:
-        # Attempt login with session management
-        client, status, message = await ig_auth_manager.login_with_session(
-            username, password
-        )
-        
-        if status == LoginStatus.SUCCESS:
-            # Success - store in global clients dict
-            with ig_clients_lock:
-                instagram_clients[username] = client
-            
-            logger.info(f"✅ Instagram @{username} logged in successfully")
-            return True, "Success", client
-        
-        elif status == LoginStatus.TWO_FACTOR_REQUIRED:
-            return False, "2FA required - please complete via Telegram", None
-        
-        elif status == LoginStatus.CHALLENGE_REQUIRED:
-            return False, "Challenge required - please complete via Telegram", None
-        
-        elif status == LoginStatus.BAD_PASSWORD:
-            return False, "Incorrect password", None
-        
-        elif status == LoginStatus.RATE_LIMITED:
-            return False, "Rate limited - wait a few minutes", None
-        
-        else:
-            return False, message, None
-    
-    except Exception as e:
-        logger.error(f"Login error for @{username}: {e}")
-        return False, str(e)[:200], None
+# These will be set from your bot.py
+ig_auth_manager: InstagramAuthManager = None
+instagram_clients: dict = None
+ig_clients_lock = None
+accounts_col = None
+encrypt_password = None
+decrypt_password = None
+save_ig_account = None
+main_menu_keyboard = None
+back_admin_button = None
 
 
 # ============================================
@@ -110,11 +34,7 @@ async def login_ig_account_v2(username: str, password: str) -> Tuple[bool, str, 
 async def setup_first_account_user_v2(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """
-    Receive Instagram username for first setup (with validation)
-    
-    This replaces your existing setup_first_account_user function
-    """
+    """Receive Instagram username for first setup (with validation)"""
     raw_username = update.message.text.strip()
     
     # Sanitize username
@@ -128,6 +48,7 @@ async def setup_first_account_user_v2(
             f"❌ Invalid username: {error_msg}\n\n"
             "Please send a valid Instagram username:"
         )
+        from bot_fixed import SETUP_FIRST_ACCOUNT_USER
         return SETUP_FIRST_ACCOUNT_USER
     
     context.user_data["setup_ig_user"] = username
@@ -142,17 +63,21 @@ async def setup_first_account_user_v2(
         "⚠️ Make sure this chat is private!"
     )
     
+    from bot_fixed import SETUP_FIRST_ACCOUNT_PASS
     return SETUP_FIRST_ACCOUNT_PASS
 
 
 async def setup_first_account_pass_v2(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """
-    Receive Instagram password for first setup (with 2FA/challenge support)
+    """Receive Instagram password for first setup (with 2FA/challenge support)"""
+    from bot_fixed import (
+        SETUP_FIRST_ACCOUNT_USER, 
+        SETUP_2FA_CODE, 
+        SETUP_CHALLENGE_METHOD,
+        ConversationHandler
+    )
     
-    This replaces your existing setup_first_account_pass function
-    """
     password = update.message.text.strip()
     username = context.user_data.get("setup_ig_user", "")
     
@@ -167,6 +92,7 @@ async def setup_first_account_pass_v2(
             "❌ Password too short (minimum 6 characters)\n\n"
             "Please send your Instagram password:"
         )
+        from bot_fixed import SETUP_FIRST_ACCOUNT_PASS
         return SETUP_FIRST_ACCOUNT_PASS
     
     status_msg = await update.effective_chat.send_message(
@@ -211,8 +137,7 @@ async def setup_first_account_pass_v2(
                 "Please send the 6-digit code:"
             )
             
-            # Transition to 2FA state
-            return SETUP_2FA_CODE  # New state you'll need to add
+            return SETUP_2FA_CODE
         
         elif status == LoginStatus.CHALLENGE_REQUIRED:
             # Challenge needed
@@ -234,14 +159,14 @@ async def setup_first_account_pass_v2(
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             
-            # Transition to challenge state
-            return SETUP_CHALLENGE_METHOD  # New state you'll need to add
+            return SETUP_CHALLENGE_METHOD
         
         elif status == LoginStatus.BAD_PASSWORD:
             await status_msg.edit_text(
                 f"❌ Incorrect password for @{username}\n\n"
                 "Please check and send the correct password:"
             )
+            from bot_fixed import SETUP_FIRST_ACCOUNT_PASS
             return SETUP_FIRST_ACCOUNT_PASS
         
         elif status == LoginStatus.RATE_LIMITED:
@@ -270,17 +195,15 @@ async def setup_first_account_pass_v2(
 
 
 # ============================================
-#       NEW 2FA HANDLER FOR SETUP
+#       2FA HANDLER FOR SETUP
 # ============================================
 
 async def setup_2fa_code_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """
-    Handle 2FA code during first account setup
+    """Handle 2FA code during first account setup"""
+    from bot_fixed import SETUP_2FA_CODE, ConversationHandler
     
-    Add this as a new handler in your bot
-    """
     username = context.user_data.get('ig_username', '')
     code = update.message.text.strip()
     
@@ -346,17 +269,15 @@ async def setup_2fa_code_handler(
 
 
 # ============================================
-#       NEW CHALLENGE HANDLERS FOR SETUP
+#       CHALLENGE HANDLERS FOR SETUP
 # ============================================
 
 async def setup_challenge_method_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """
-    Handle challenge method selection during setup
+    """Handle challenge method selection during setup"""
+    from bot_fixed import SETUP_CHALLENGE_CODE, ConversationHandler
     
-    Add this as a new callback handler
-    """
     query = update.callback_query
     await query.answer()
     
@@ -418,11 +339,9 @@ async def setup_challenge_method_callback(
 async def setup_challenge_code_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """
-    Handle challenge code verification during setup
+    """Handle challenge code verification during setup"""
+    from bot_fixed import SETUP_CHALLENGE_CODE, ConversationHandler
     
-    Add this as a new handler
-    """
     username = context.user_data.get('ig_username', '')
     code = update.message.text.strip()
     
@@ -487,17 +406,15 @@ async def setup_challenge_code_handler(
 
 
 # ============================================
-#       UPDATED ADMIN ADD ACCOUNT HANDLERS
+#       ADMIN ADD ACCOUNT HANDLERS
 # ============================================
 
 async def add_ig_user_handler_v2(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """
-    Receive Instagram username for admin adding account (with validation)
+    """Receive Instagram username for admin adding account"""
+    from bot_fixed import ADD_ACCOUNT_USER
     
-    This replaces your existing add_ig_user_handler function
-    """
     raw_username = update.message.text.strip()
     
     # Sanitize username
@@ -524,17 +441,22 @@ async def add_ig_user_handler_v2(
         "• Password is never logged"
     )
     
+    from bot_fixed import ADD_ACCOUNT_PASS
     return ADD_ACCOUNT_PASS
 
 
 async def add_ig_pass_handler_v2(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ):
-    """
-    Receive Instagram password for admin (with 2FA/challenge support)
+    """Receive Instagram password for admin (with 2FA/challenge support)"""
+    from bot_fixed import (
+        ADD_ACCOUNT_PASS,
+        ADD_ACCOUNT_USER, 
+        ADD_ACCOUNT_2FA,
+        ADD_ACCOUNT_CHALLENGE_METHOD,
+        ADMIN_MENU
+    )
     
-    This replaces your existing add_ig_pass_handler function
-    """
     password = update.message.text.strip()
     username = context.user_data.get("new_ig_user", "")
     
@@ -587,7 +509,7 @@ async def add_ig_pass_handler_v2(
                 "Please send the 6-digit code:"
             )
             
-            return ADD_ACCOUNT_2FA  # New state
+            return ADD_ACCOUNT_2FA
         
         elif status == LoginStatus.CHALLENGE_REQUIRED:
             # Store for challenge
@@ -609,7 +531,7 @@ async def add_ig_pass_handler_v2(
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             
-            return ADD_ACCOUNT_CHALLENGE_METHOD  # New state
+            return ADD_ACCOUNT_CHALLENGE_METHOD
         
         elif status == LoginStatus.BAD_PASSWORD:
             await status_msg.edit_text(
@@ -621,7 +543,8 @@ async def add_ig_pass_handler_v2(
         elif status == LoginStatus.RATE_LIMITED:
             await status_msg.edit_text(
                 "⏸️ Rate limited - wait 5-10 minutes\n\n"
-                "Use /admin to return to panel."
+                "Use /admin to return to panel.",
+                reply_markup=back_admin_button(),
             )
             return ADMIN_MENU
         
@@ -646,11 +569,7 @@ async def add_ig_pass_handler_v2(
 # ============================================
 
 async def load_all_ig_accounts_v2():
-    """
-    Load all saved Instagram accounts on startup (async version)
-    
-    This replaces your existing load_all_ig_accounts function
-    """
+    """Load all saved Instagram accounts on startup (async version)"""
     try:
         accounts = list(accounts_col.find({}))
         
@@ -682,59 +601,3 @@ async def load_all_ig_accounts_v2():
         
     except Exception as e:
         logger.error(f"Error loading accounts: {e}")
-
-
-# ============================================
-#       SESSION REFRESH JOB
-# ============================================
-
-async def refresh_ig_sessions_job(context: ContextTypes.DEFAULT_TYPE):
-    """
-    Periodic job to refresh Instagram sessions
-    
-    Add this to your job queue:
-    job_queue.run_repeating(refresh_ig_sessions_job, interval=3600, first=300)
-    """
-    try:
-        logger.info("Running session refresh job...")
-        
-        accounts = list(accounts_col.find({}))
-        
-        for account in accounts:
-            username = account['username']
-            
-            try:
-                with ig_clients_lock:
-                    client = instagram_clients.get(username)
-                
-                if client:
-                    # Verify session
-                    is_valid = await ig_auth_manager.verify_session(client)
-                    
-                    if is_valid:
-                        continue
-                    else:
-                        logger.info(f"Session expired for @{username}, refreshing...")
-                
-                # Re-login if needed
-                password = decrypt_password(account['password'])
-                
-                client, status, message = await ig_auth_manager.login_with_session(
-                    username, password
-                )
-                
-                if status == LoginStatus.SUCCESS:
-                    with ig_clients_lock:
-                        instagram_clients[username] = client
-                    logger.info(f"✅ Session refreshed for @{username}")
-                else:
-                    logger.warning(f"Failed to refresh @{username}: {message}")
-            
-            except Exception as e:
-                logger.error(f"Error refreshing @{username}: {e}")
-        
-        # Cleanup expired pending auth
-        await ig_auth_manager.cleanup_expired_pending_auth()
-        
-    except Exception as e:
-        logger.error(f"Session refresh job error: {e}")
